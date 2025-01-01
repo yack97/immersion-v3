@@ -6,7 +6,7 @@ import { Dialog, DialogPanel } from '@headlessui/react';
 import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import Image from 'next/image';
 import { useTranslations } from 'next-intl';
-//import LanguageSwitcher from './LanguageSwitcher';
+import LanguageSwitcher from './LanguageSwitcher';
 
 const Navbar = () => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -58,7 +58,7 @@ const Navbar = () => {
         </div>
 
         <div className="hidden lg:flex lg:flex-1 lg:justify-end">
-           {/* <LanguageSwitcher /> */}
+           <LanguageSwitcher /> 
         </div>
       </nav>
 
@@ -100,7 +100,7 @@ const Navbar = () => {
                 ))}
               </div>
               <div className="py-6">
-                {/* <LanguageSwitcher />*/}
+                <LanguageSwitcher />
               </div>
             </div>
           </div>

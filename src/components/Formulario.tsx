@@ -1,274 +1,289 @@
-// src/components/Formulario.tsx
-
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { collection, addDoc } from 'firebase/firestore';
 import { db } from '../app/firebaseConfig';
-import emailjs from 'emailjs-com';
+import emailjs from '@emailjs/browser';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+// Types
+type ContactType = 'persona' | 'empresa';
+
+interface FormData {
+  nombre: string;
+  email: string;
+  url: string;
+  dni: string;
+  nombreEmpresa: string;
+  cuilEmpresa: string;
+  service: string;
+  mensaje: string;
+}
+
+const INITIAL_FORM_STATE: FormData = {
+  nombre: '',
+  email: '',
+  url: '',
+  dni: '',
+  nombreEmpresa: '',
+  cuilEmpresa: '',
+  service: '',
+  mensaje: '',
+};
+
+const SERVICES = [
+  'Desarrollo web',
+  'Marketing digital',
+  'Diseño UX/UI',
+  'Consultoría',
+] as const;
+
+const EMAIL_CONFIG = {
+  serviceId: 'service_pmcdpsa',
+  templateId: 'template_l4blfjn',
+  userId: '2nr6R1gaSrTHzXlYs',
+} as const;
 
 export default function Formulario() {
-    const t = useTranslations('formulario');
-    const [formData, setFormData] = useState({
-        nombre: '',
-        email: '',
-        url: '',
-        dni: '',
-        nombreEmpresa: '',
-        cuilEmpresa: '',
-        service: '',
-        mensaje: '',
-    });
-    const [contactType, setContactType] = useState('persona');
-    const [error, setError] = useState<string | null>(null);
-    const [success, setSuccess] = useState<string | null>(null);
+  const t = useTranslations('formulario');
+  const [formData, setFormData] = useState<FormData>(INITIAL_FORM_STATE);
+  const [contactType, setContactType] = useState<ContactType>('persona');
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-        const { name, value } = e.target;
-        setFormData((prevData) => ({
-            ...prevData,
-            [name]: value,
-        }));
-    };
+  const handleInputChange = useCallback((
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  }, []);
 
-    const validateFields = () => {
-        if (!formData.nombre || !formData.email || !formData.service) {
-            return t('requiredFieldsError');
-        }
-        if (contactType === 'empresa' && (!formData.nombreEmpresa || !formData.cuilEmpresa)) {
-            return t('companyFieldsError');
-        }
-        return null;
-    };
+  const validateFields = useCallback(() => {
+    if (!formData.nombre || !formData.email || !formData.service) {
+      return t('requiredFieldsError');
+    }
+    if (contactType === 'empresa' && !formData.nombreEmpresa) {
+      return t('companyFieldsError');
+    }
+    return null;
+  }, [formData, contactType, t]);
 
-    const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        setError(null);
-        setSuccess(null);
+  const sendEmail = useCallback(async (finalFormData: FormData & { contactType: ContactType }) => {
+    try {
+      await emailjs.send(
+        EMAIL_CONFIG.serviceId,
+        EMAIL_CONFIG.templateId,
+        Object.fromEntries(
+          Object.entries(finalFormData).map(([key, value]) => [key, String(value)])
+        ),
+        EMAIL_CONFIG.userId
+      );
+    } catch (error) {
+      console.error('Email sending failed:', error);
+      throw new Error('Failed to send email');
+    }
+  }, []);
 
-        const validationError = validateFields();
-        if (validationError) {
-            setError(validationError);
-            return;
-        }
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setError(null);
+    setSuccess(null);
+    setIsSubmitting(true);
 
-        const finalFormData = {
-            ...formData,
-            contactType,
-            ...(contactType === 'persona' ? { dni: formData.dni } : {
-                nombreEmpresa: formData.nombreEmpresa,
-                cuilEmpresa: formData.cuilEmpresa,
-            }),
-        };
+    try {
+      const validationError = validateFields();
+      if (validationError) {
+        setError(validationError);
+        return;
+      }
 
-        try {
-            const docRef = await addDoc(collection(db, "formSubmissions"), finalFormData);
-            console.log("Document written with ID: ", docRef.id);
-            setSuccess(t('formSentSuccess'));
+      const finalFormData = {
+        ...formData,
+        contactType,
+        ...(contactType === 'persona' 
+          ? { dni: formData.dni } 
+          : {
+              nombreEmpresa: formData.nombreEmpresa,
+              cuilEmpresa: formData.cuilEmpresa,
+            }
+        ),
+      };
 
-            await emailjs.send('service_pmcdpsa', 'template_l4blfjn', {
-                nombre: String(formData.nombre),
-                email: String(formData.email),
-                url: String(formData.url),
-                dni: String(formData.dni),
-                nombreEmpresa: String(formData.nombreEmpresa),
-                cuilEmpresa: String(formData.cuilEmpresa),
-                service: String(formData.service),
-                mensaje: String(formData.mensaje),
-                contactType: String(contactType),
-            }, '2nr6R1gaSrTHzXlYs');
+      // Parallel submission to Firestore and EmailJS
+      await Promise.all([
+        addDoc(collection(db, "formSubmissions"), finalFormData),
+        sendEmail(finalFormData)
+      ]);
 
-            console.log('Correo enviado con éxito');
+      setSuccess(t('formSentSuccess'));
+      setFormData(INITIAL_FORM_STATE);
+    } catch (err) {
+      console.error("Form submission failed:", err);
+      setError(t('formSendError'));
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
-            setFormData({
-                nombre: '',
-                email: '',
-                url: '',
-                dni: '',
-                nombreEmpresa: '',
-                cuilEmpresa: '',
-                service: '',
-                mensaje: '',
-            });
-        } catch (err) {
-            console.error("Error adding document: ", err);
-            setError(t('formSendError'));
-        }
-    };
+  const renderField = useCallback(({ 
+    label, 
+    name, 
+    type = 'text', 
+    required = false,
+    placeholder
+  }: {
+    label: string;
+    name: keyof FormData;
+    type?: string;
+    required?: boolean;
+    placeholder?: string;
+  }) => (
+    <div className="form-group">
+      <label htmlFor={name} className="text-white font-semibold">
+        {label} {required && <span className="text-red-500">*</span>}
+      </label>
+      <input
+        type={type}
+        name={name}
+        className="form-input mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
+        id={name}
+        placeholder={placeholder || label}
+        required={required}
+        value={formData[name]}
+        onChange={handleInputChange}
+      />
+    </div>
+  ), [formData, handleInputChange]);
 
-    return (
-        <div className="mt-12 flex flex-col items-center">
-            <div className="relative z-10 max-w-2xl w-full px-6 lg:max-w-7xl lg:px-8 p-4 bg-white bg-opacity-10 backdrop-blur-lg rounded-md">
-                <form className="container" onSubmit={handleSubmit}>
-                    <div className="grid grid-cols-1 gap-6">
-                        <div className="form-group">
-                            <label className="text-white font-semibold">{t('contactType')}</label>
-                            <div className="flex flex-col sm:flex-row space-x-0 sm:space-x-4 mt-2">
-                                <div className="form-check">
-                                    <input
-                                        className="form-check-input"
-                                        type="radio"
-                                        name="contactType"
-                                        id="flexRadioPersona"
-                                        value="persona"
-                                        checked={contactType === 'persona'}
-                                        onChange={() => setContactType('persona')}
-                                    />
-                                    <label className="ml-2 text-white" htmlFor="flexRadioPersona">
-                                        {t('persona')}
-                                    </label>
-                                </div>
-                                <div className="form-check">
-                                    <input
-                                        className="form-check-input"
-                                        type="radio"
-                                        name="contactType"
-                                        id="flexRadioEmpresa"
-                                        value="empresa"
-                                        checked={contactType === 'empresa'}
-                                        onChange={() => setContactType('empresa')}
-                                    />
-                                    <label className="ml-2 text-white" htmlFor="flexRadioEmpresa">
-                                        {t('empresa')}
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <div className="form-group">
-                                <label htmlFor="nombre" className="text-white font-semibold">{t('name')} <span className="text-red-500">*</span></label>
-                                <input
-                                    type="text"
-                                    name="nombre"
-                                    className="form-input mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
-                                    id="nombre"
-                                    placeholder={t('namePlaceholder')}
-                                    required
-                                    value={formData.nombre}
-                                    onChange={handleInputChange}
-                                />
-                            </div>
-
-                            <div className="form-group">
-                                <label htmlFor="email" className="text-white font-semibold">{t('email')} <span className="text-red-500">*</span></label>
-                                <input
-                                    type="email"
-                                    name="email"
-                                    className="form-input mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
-                                    id="email"
-                                    placeholder={t('emailPlaceholder')}
-                                    required
-                                    value={formData.email}
-                                    onChange={handleInputChange}
-                                />
-                            </div>
-                        </div>
-
-                        <div className="grid md:grid-cols-2 gap-4">
-                            <div className="form-group">
-                                <label htmlFor="url" className="text-white font-semibold">{t('url')} </label>
-                                <input
-                                    type="text"
-                                    name="url"
-                                    className="form-input mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
-                                    id="url"
-                                    placeholder={t('urlPlaceholder')}
-                                    value={formData.url}
-                                    onChange={handleInputChange}
-                                />
-                            </div>
-
-                            {contactType === 'persona' && (
-                                <div className="form-group">
-                                    <label htmlFor="dni" className="text-white font-semibold">{t('dni')} </label>
-                                    <input
-                                        type="text"
-                                        name="dni"
-                                        className="form-input mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
-                                        id="dni"
-                                        placeholder={t('dniPlaceholder')}
-                                        value={formData.dni}
-                                        onChange={handleInputChange}
-                                    />
-                                </div>
-                            )}
-
-                            {contactType === 'empresa' && (
-                                <>
-                                    <div className="form-group">
-                                        <label htmlFor="nombreEmpresa" className="text-white font-semibold">{t('companyName')} <span className="text-red-500">*</span></label>
-                                        <input
-                                            type="text"
-                                            name="nombreEmpresa"
-                                            className="form-input mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
-                                            id="nombreEmpresa"
-                                            placeholder={t('companyNamePlaceholder')}
-                                            required
-                                            value={formData.nombreEmpresa}
-                                            onChange={handleInputChange}
-                                        />
-                                    </div>
-                                    <div className="form-group">
-                                        <label htmlFor="cuilEmpresa" className="text-white font-semibold">{t('companyCuil')}</label>
-                                        <input
-                                            type="text"
-                                            name="cuilEmpresa"
-                                            className="form-input mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
-                                            id="cuilEmpresa"
-                                            placeholder={t('companyCuilPlaceholder')}
-                                            value={formData.cuilEmpresa}
-                                            onChange={handleInputChange}
-                                        />
-                                    </div>
-                                </>
-                            )}
-                        </div>
-
-                        <div className="form-group">
-                            <label className="text-white font-semibold">{t('serviceLabel')} <span className="text-red-500">*</span></label>
-                            <select
-                                name="service"
-                                className="form-select mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
-                                required
-                                value={formData.service}
-                                onChange={handleInputChange}
-                            >
-                                <option value="" disabled>{t('servicePlaceholder')}</option>
-                                <option value="Desarrollo web">Desarrollo web</option>
-                                <option value="Marketing digital">Marketing digital</option>
-                                <option value="Diseño UX/UI">Diseño UX/UI</option>
-                                <option value="Consultoría">Consultoría</option>
-
-
-                            </select>
-                        </div>
-
-                        <div className="form-group">
-                            <label htmlFor="mensaje" className="text-white font-semibold">{t('messageLabel')}</label>
-                            <textarea
-                                name="mensaje"
-                                className="form-input mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
-                                id="mensaje"
-                                placeholder={t('messagePlaceholder')}
-                                value={formData.mensaje}
-                                onChange={handleInputChange}
-                            />
-                        </div>
-
-                        {error && <p className="text-red-500">{error}</p>}
-                        {success && <p className="text-green-500">{success}</p>}
-
-                        <button
-                            type="submit"
-                            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-                        >
-                            {t('submitButton')}
-                        </button>
-                    </div>
-                </form>
+  return (
+    <div className="mt-12 flex flex-col items-center">
+      <div className="relative z-10 max-w-2xl w-full px-6 lg:max-w-7xl lg:px-8 p-4 bg-white bg-opacity-10 backdrop-blur-lg rounded-md">
+        <form className="container space-y-6" onSubmit={handleSubmit}>
+          {/* Contact Type Selection */}
+          <fieldset className="space-y-2">
+            <legend className="text-white font-semibold">{t('contactType')}</legend>
+            <div className="flex flex-col sm:flex-row gap-4">
+              {(['persona', 'empresa'] as const).map((type) => (
+                <label key={type} className="inline-flex items-center">
+                  <input
+                    type="radio"
+                    className="form-radio"
+                    name="contactType"
+                    value={type}
+                    checked={contactType === type}
+                    onChange={() => setContactType(type)}
+                  />
+                  <span className="ml-2 text-white">{t(type)}</span>
+                </label>
+              ))}
             </div>
-        </div>
-    );
+          </fieldset>
+
+          {/* Basic Information */}
+          <div className="grid md:grid-cols-2 gap-4">
+            {renderField({ 
+              label: t('name'), 
+              name: 'nombre', 
+              required: true, 
+              placeholder: t('namePlaceholder') 
+            })}
+            {renderField({ 
+              label: t('email'), 
+              name: 'email', 
+              type: 'email', 
+              required: true, 
+              placeholder: t('emailPlaceholder') 
+            })}
+          </div>
+
+          {/* Contact Specific Fields */}
+          <div className="grid md:grid-cols-2 gap-4">
+            {renderField({ 
+              label: t('url'), 
+              name: 'url', 
+              placeholder: t('urlPlaceholder') 
+            })}
+            {contactType === 'persona' ? (
+              renderField({ 
+                label: t('dni'), 
+                name: 'dni', 
+                placeholder: t('dniPlaceholder') 
+              })
+            ) : (
+              <>
+                {renderField({ 
+                  label: t('companyName'), 
+                  name: 'nombreEmpresa', 
+                  required: true, 
+                  placeholder: t('companyNamePlaceholder') 
+                })}
+                {renderField({ 
+                  label: t('companyCuil'), 
+                  name: 'cuilEmpresa', 
+                  placeholder: t('companyCuilPlaceholder') 
+                })}
+              </>
+            )}
+          </div>
+
+          {/* Service Selection */}
+          <div className="form-group">
+            <label className="text-white font-semibold">
+              {t('serviceLabel')} <span className="text-red-500">*</span>
+            </label>
+            <select
+              name="service"
+              className="form-select mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900"
+              required
+              value={formData.service}
+              onChange={handleInputChange}
+            >
+              <option value="" disabled>{t('servicePlaceholder')}</option>
+              {SERVICES.map(service => (
+                <option key={service} value={service}>{service}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Message */}
+          <div className="form-group">
+            <label htmlFor="mensaje" className="text-white font-semibold">
+              {t('messageLabel')}
+            </label>
+            <textarea
+              name="mensaje"
+              className="form-input mt-2 w-full p-2 border border-gray-300 rounded-md bg-gray-50 text-gray-900 h-32"
+              id="mensaje"
+              placeholder={t('messagePlaceholder')}
+              value={formData.mensaje}
+              onChange={handleInputChange}
+            />
+          </div>
+
+          {/* Status Messages */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+          {success && (
+            <Alert>
+              <AlertDescription>{success}</AlertDescription>
+            </Alert>
+          )}
+
+          {/* Submit Button */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-blue-500 hover:bg-blue-600 disabled:bg-blue-300 text-white font-bold py-2 px-4 rounded transition-colors"
+          >
+            {isSubmitting ? t('submitting') : t('submitButton')}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
 }

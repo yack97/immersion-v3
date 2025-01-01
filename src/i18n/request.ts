@@ -6,10 +6,22 @@ import { routing } from './routing';
 type Locale = 'en' | 'es';
 
 export default getRequestConfig(async ({ locale }) => {
-  // Validar que el parámetro `locale` entrante sea válido y que sea del tipo correcto
-  if (!routing.locales.includes(locale as Locale)) notFound();
+  // Si el `locale` no es válido, define uno por defecto y retorna un 404 si es necesario
+  const defaultLocale: Locale = 'en'; // Cambia a tu idioma predeterminado si es necesario
+  const resolvedLocale: Locale = routing.locales.includes(locale as Locale) 
+    ? (locale as Locale) 
+    : defaultLocale;
 
-  return {
-    messages: (await import(`../../messages/${locale}.json`)).default
-  };
+  // Cargar los mensajes asociados al idioma
+  try {
+    const messages = (await import(`../../messages/${resolvedLocale}.json`)).default;
+
+    return {
+      locale: resolvedLocale,
+      messages,
+    };
+  } catch (error) {
+    console.error(`Error loading messages for locale "${resolvedLocale}":`, error);
+    notFound(); // Manejo de errores en caso de que no se encuentren los mensajes
+  }
 });

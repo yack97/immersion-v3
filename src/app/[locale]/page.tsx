@@ -1,31 +1,38 @@
-import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import Script from 'next/script';
 
-// Group dynamic imports together with consistent configuration
-const components = {
-  Carousel: dynamic(() => import('@/components/Carousel')),
-  //NuestroEquipo: dynamic(() => import('@/components/NuestroEquipo')),
-  //ImageGrid: dynamic(() => import('@/components/modal/ImageGrid'), { ssr: false }),
-  ComoTrabajamos: dynamic(() => import('@/components/ComoTrabajamos')),
-  //PorqueImmersion: dynamic(() => import('@/components/PorqueImmersion')),
-  //MisionVision: dynamic(() => import('@/components/MisionVision')),
-  //Formulario: dynamic(() => import('@/components/Formulario'), { ssr: false }),
-  //NewsLatter: dynamic(() => import('@/components/NewsLatter'), { ssr: false }),
-  Footer: dynamic(() => import('@/components/Footer'))
-};
+// Direct imports instead of dynamic
+import Carousel from '@/components/Carousel';
+import NuestroEquipo from '@/components/NuestroEquipo';
+import ImageGrid from '@/components/modal/ImageGrid';
+import ComoTrabajamos from '@/components/ComoTrabajamos';
+import PorqueImmersion from '@/components/PorqueImmersion';
+import MisionVision from '@/components/MisionVision';
+import Formulario from '@/components/Formulario';
+import NewsLatter from '@/components/NewsLatter';
+import Footer from '@/components/Footer';
+import { JSX } from 'react';
 
-// Constants for better maintainability
-const GTAG_ID = 'G-NXXTEYLQ3N';
-const IMAGES = {
+// Define interfaces
+interface DecorativeImageProps {
+  src: string;
+  alt: string;
+  className: string;
+  transform?: string;
+  [key: string]: any; // for any additional props
+}
+
+// Constants with type definitions
+const GTAG_ID: string = 'G-NXXTEYLQ3N';
+const IMAGES: { [key: string]: string } = {
   astronaut: "https://firebasestorage.googleapis.com/v0/b/immersion-005-7e407.appspot.com/o/imagenesImmersion%2FAdobeStock_532826579.svg?alt=media&token=2f3b1cc9-4c9d-44db-b3c1-010c33ce15a6",
   leftDecor: "https://firebasestorage.googleapis.com/v0/b/immersion-005-7e407.appspot.com/o/imagenesImmersion%2FEllipse%203.svg?alt=media&token=3f210f81-8ca3-472c-ba22-b3e73c3ac5fb",
   additionalDecor: "https://firebasestorage.googleapis.com/v0/b/immersion-005-7e407.appspot.com/o/imagenesImmersion%2FEllipse%202%20(2).svg?alt=media&token=267d096a-8e96-48ec-b01a-0e2bbf4759d6",
   rightDecor: "https://firebasestorage.googleapis.com/v0/b/immersion-005-7e407.appspot.com/o/imagenesImmersion%2FEllipse%201.svg?alt=media&token=cf1506fa-e0ca-4923-8829-9dee3add13e4"
 };
 
-// Reusable image component for decorative backgrounds
-const DecorativeImage = ({ src, alt, className, ...props }) => (
+// Reusable image component with types
+const DecorativeImage: React.FC<DecorativeImageProps> = ({ src, alt, className, ...props }) => (
   <div className={`absolute z-10 hidden sm:block w-full max-w-[900px] ${className}`}>
     <Image
       src={src}
@@ -39,7 +46,7 @@ const DecorativeImage = ({ src, alt, className, ...props }) => (
   </div>
 );
 
-export default function HomePage() {
+export default function HomePage(): JSX.Element {
   return (
     <div className="relative flex flex-col min-h-screen overflow-hidden">
       {/* Google Tag Manager */}
@@ -76,18 +83,18 @@ export default function HomePage() {
         className="top-1/4 left-0 transform -translate-y-1/4"
         transform="translate-x-[-50%]"
       />
+        <Carousel />
 
       {/* Main content */}
       <main className="relative z-10 flex-grow">
-        <components.Carousel />
-        <components.NuestroEquipo />
-        <components.ImageGrid />
+        <NuestroEquipo />
+        <ImageGrid />
 
         <section id="conocenos" className="mt-8 pt-8">
-          <components.ComoTrabajamos />
+          <ComoTrabajamos />
         </section>
 
-        <components.PorqueImmersion />
+        <PorqueImmersion />
 
         <DecorativeImage
           src={IMAGES.additionalDecor}
@@ -103,14 +110,14 @@ export default function HomePage() {
           transform="translate-x-[50%]"
         />
 
-        <components.MisionVision />
+        <MisionVision />
 
         <section id="formulario" className="mt-8 pt-10">
-          <components.Formulario />
+          <Formulario />
         </section>
 
-        <components.NewsLatter />
-        <components.Footer />
+        <NewsLatter />
+        <Footer />
       </main>
     </div>
   );
